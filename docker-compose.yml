@@ -1,0 +1,5 @@
+version: "2"
+
+services:
+  gworkhours:
+    image: jearde/google-api-work-hours:latest
