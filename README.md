@@ -27,15 +27,16 @@ Run the script in native Python to create the `token.json` file
 Run the script in Docker interactive mode to create the `token.json` file
 1. Copy your `credentials.json` files to the `config` folder
 2. Build the image `docker build -t jearde/google-api-work-hours:latest .`
-3. Run the image interactive `docker run -it -p8088:8088 --rm --name google-api-work-hours jearde/google-api-work-hours:latest`
+3. Run the image interactive `docker run -it -p8088:8088 -v $(pwd)/config:/app/config --rm --name google-api-work-hours jearde/google-api-work-hours:latest`
 4. Open the URL in your browser
 5. Copy the code from the browser URL between `&code=` and `&scope=` and paste it into the terminal and press enter
+6. The `token.json` should now be created in the `config` folder and used in the next runs
 
 ## Run with Docker
 1. Build the image
     1. `docker build -t jearde/google-api-work-hours:latest .`
 2. Run the container
-    1. `docker run -it -p8088:8088 --rm --name google-api-work-hours -e SERVER=1 jearde/google-api-work-hours:latest`
+    1. `docker run -it -p8088:8088 -v $(pwd)/config:/app/config --rm --name google-api-work-hours -e SERVER=1 jearde/google-api-work-hours:latest`
     2. or `docker-compose up -d`
 3. Stop the container
     1. `docker stop google-api-work-hours`
@@ -95,3 +96,4 @@ Run the script in Docker interactive mode to create the `token.json` file
 ## What does not work
 - [ ] Using a Service Account
 - [ ] Using a Service Account in Docker container
+- [ ] Description of events in lists

@@ -5,3 +5,5 @@ services:
     image: jearde/google-api-work-hours:latest
     ports:
       - 8088:8088/tcp
+    volumes:
+      - ./config:/app/config

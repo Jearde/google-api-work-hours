@@ -1,1 +1,1 @@
-*/2 * * * * /usr/bin/python3 /app/work_hours/main.py >> /var/log/cron.log 2>&1
+*/1 * * * * /app/run_python.sh >> /var/log/cron.log 2>&1
