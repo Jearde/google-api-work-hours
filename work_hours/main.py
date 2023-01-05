@@ -14,6 +14,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.errors import HttpError
+from oauth2client.service_account import ServiceAccountCredentials
 
 EXPORT_PATH = 'export'
 
@@ -47,14 +48,83 @@ parser.add_argument(
     default=0,
     help='Number of months to go back. 0 is current month, 1 is last month (default: 1)')
 
+parser.add_argument(
+    '--server',
+    type=bool,
+    dest='server_mode',
+    action=argparse.BooleanOptionalAction,
+    help='Use console for authorization (default: False)')
+
 # If modifying these scopes, delete the file token.json.
 # https://developers.google.com/identity/protocols/oauth2/scopes#drive
 SCOPES = [
     'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/drive',
-    ]    
+    ]
 
-def main(month_past, cred_path, config_path):
+def create_service_credentials(user_email):
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(
+        f"{config_path}/service_account.json",
+        scopes=SCOPES)
+
+    credentials = credentials.create_delegated(user_email)
+
+    return credentials
+
+def create_token_local(creds, cred_path):
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                f"{cred_path}/credentials.json", SCOPES)
+            creds = flow.run_local_server(
+                host='localhost',
+                port=8088,
+                authorization_prompt_message='Please visit this URL for authorizing: {url}',
+                success_message='The auth flow is complete; you may close this window.',
+                open_browser=True
+                )
+        # Save the credentials for the next run
+        with open(f"{cred_path}/token.json", 'w', encoding='utf-8') as token:
+            token.write(creds.to_json())
+
+    return creds
+
+
+def credentials_to_dict(credentials):
+    return {'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes,
+            'id_token': credentials.id_token}
+
+def create_token_server(creds, cred_path):
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    else:
+        flow = InstalledAppFlow.from_client_secrets_file(
+            f"{cred_path}/credentials.json",
+            scopes=SCOPES
+            )
+
+        flow.redirect_uri = "http://localhost"
+        auth_url, __ = flow.authorization_url(prompt="consent")
+        logger.info('Please go to this URL for authorization: %s', auth_url)
+        code = input('Enter the authorization code from the browser URL: ')
+        flow.fetch_token(code=code)
+
+        creds = flow.credentials
+
+    # Save the credentials for the next run
+    with open(f"{cred_path}/token.json", 'w', encoding='utf-8') as token:
+        token.write(creds.to_json())
+
+    return creds
+
+def main(month_past, cred_path, config_path, server_mode):
     """Shows basic usage of the Google Calendar API.
     Prints the start and name of the next 10 events on the user's calendar.
     """
@@ -64,17 +134,13 @@ def main(month_past, cred_path, config_path):
     # time.
     if os.path.exists(f"{cred_path}/token.json"):
         creds = Credentials.from_authorized_user_file(f"{cred_path}/token.json", SCOPES)
+    
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+        if server_mode:
+            creds = create_token_server(creds, cred_path)
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                f"{cred_path}/credentials.json", SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open(f"{cred_path}/token.json", 'w', encoding='utf-8') as token:
-            token.write(creds.to_json())
+            creds = create_token_local(creds, cred_path)
     
     try:
         with open(f"{config_path}/work_hours.json", encoding='utf-8') as json_file:
@@ -121,6 +187,7 @@ if __name__ == '__main__':
     cred_path = os.path.abspath(args.cred_path)
     config_path = os.path.abspath(args.config_path)
     past_month = args.past_month
+    server_mode = args.server_mode
 
     os.makedirs(log_path, exist_ok=True)
     logging.basicConfig(
@@ -133,4 +200,4 @@ if __name__ == '__main__':
         ]
     )
 
-    main(past_month, cred_path, config_path)
+    main(past_month, cred_path, config_path, server_mode)

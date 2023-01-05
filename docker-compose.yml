@@ -3,3 +3,5 @@ version: "2"
 services:
   gworkhours:
     image: jearde/google-api-work-hours:latest
+    ports:
+      - 8088:8088/tcp
