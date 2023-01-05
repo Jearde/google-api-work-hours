@@ -3,7 +3,10 @@ FROM python:3.10
 RUN apt-get update -y
 RUN apt-get install -y cron
 
-COPY . /app
+# COPY . /app
+COPY requirements.txt /app/requirements.txt
+COPY ./work_hours /app/work_hours
+COPY ./run_python.sh /app/run_python.sh
 
 WORKDIR /app
 
@@ -12,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN chmod 444 work_hours/main.py
 RUN chmod 444 requirements.txt
+RUN chmod +x /app/run_python.sh
 
 # Copy hello-cron file to the cron.d directory
 COPY work_hours_cron /etc/cron.d/work_hours_cron
@@ -28,4 +32,4 @@ RUN touch /var/log/cron.log
 EXPOSE 8088
 
 # Run the command on container startup
-CMD python work_hours/main.py --server && cron && tail -f /var/log/cron.log
+CMD /app/run_python.sh && cron && tail -f /var/log/cron.log
