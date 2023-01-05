@@ -34,7 +34,7 @@ def read_header(creds, spreadsheet_id):
 
     except HttpError as error:
         logger.error('An error occurred: %s', error)
-        header = None
+        header, tz, locale, sheet_title = None, None, None, None
 
     return header, tz, locale, sheet_title
 
