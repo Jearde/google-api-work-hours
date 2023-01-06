@@ -6,7 +6,7 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-def read_header(creds, spreadsheet_id):
+def read_header(creds, spreadsheet_id, sheet_id=0):
     # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
     try:
         # create drive api client
@@ -15,7 +15,7 @@ def read_header(creds, spreadsheet_id):
         # pylint: disable=maybe-no-member
         sheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         
-        sheet_0 = sheet['sheets'][0]['properties']
+        sheet_0 = sheet['sheets'][sheet_id]['properties']
         sheet_title = sheet_0['title']
         tz = sheet['properties']['timeZone']
         locale = sheet['properties']['locale']
@@ -146,7 +146,14 @@ def sync_header(df, orig_header):
 def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
     # TODO - Check if row exists
 
-    orig_header, _, _, sheet_title = read_header(creds, spreadsheet_id)
+    if time_type == 'Month':
+        sheet_id = 0
+    elif time_type == 'Week':
+        sheet_id = 1
+    else:
+        raise ValueError('time_type must be Month or Week')
+    
+    orig_header, _, _, sheet_title = read_header(creds, spreadsheet_id, sheet_id=sheet_id)
 
     if orig_header is None:
         header = df.columns.tolist()
