@@ -122,7 +122,10 @@ def get_statistics_by_company_weekly(df):
 
 def sync_header(df, orig_header):
     # Check if there are new columns
-    new_columns = list(set(df.columns.unique().tolist()) - set(orig_header))
+    df_columns = [item.lower() for item in df.columns.unique().tolist()]
+    orig_header = [item.lower() for item in orig_header]
+
+    new_columns = list(set(df_columns) - set(orig_header))
     header = orig_header + new_columns
 
     # Get month column
@@ -168,7 +171,7 @@ def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
         df_update = sync_header(df, orig_header)
 
         if len(df_update.columns) != len(orig_header):
-            logger.warning('Columns are not the same. Header: %s, Columns: %s', header, df_update.columns.tolist())
+            logger.warning('Columns are not the same. Header: %s, Columns: %s', orig_header, df_update.columns.tolist())
             logger.info('Updating header from Sheet ID: "%s".', spreadsheet_id)
             update_rows(creds, df_update.columns.tolist(), spreadsheet_id, sheet=sheet_title)
 
@@ -177,18 +180,14 @@ def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
     return response
 
 
-def append_statistics(creds, df, spreadsheet_id):
-    df = get_statistics_by_company(df)
-    logger.info('Summary of work hours: \n %s', df.to_string())
+def append_statistics(creds, df, spreadsheet_id, time_type='Month'):
+    if time_type == 'Month':
+        df = get_statistics_by_company(df)
+    else:
+        df = get_statistics_by_company_weekly(df)
 
-    response = update_sheet(creds, df, spreadsheet_id, time_type='Month')
+    logger.info('Summary of work hours for %s: \n %s', time_type.lower(), df.to_string())
 
-    return response.get('id')
-
-def append_statistics_weekly(creds, df, spreadsheet_id):
-    df = get_statistics_by_company_weekly(df)
-    logger.info('Summary of work hours for week: \n %s', df.to_string())
-
-    response = update_sheet(creds, df, spreadsheet_id, time_type='Week')
+    response = update_sheet(creds, df, spreadsheet_id, time_type=time_type)
 
     return response.get('id')
