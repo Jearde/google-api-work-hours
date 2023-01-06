@@ -49,6 +49,13 @@ parser.add_argument(
     help='Number of months to go back. 0 is current month, 1 is last month (default: 1)')
 
 parser.add_argument(
+    '--week',
+    type=int,
+    dest='past_week',
+    default=0,
+    help='Number of months to go back. 0 is current month, 1 is last month (default: 1)')
+
+parser.add_argument(
     '--server',
     type=bool,
     dest='server_mode',
@@ -124,7 +131,7 @@ def create_token_server(creds, cred_path):
 
     return creds
 
-def main(month_past, cred_path, config_path, server_mode):
+def main(cred_path, config_path, server_mode, month_past=0, week_past=0):
     """Shows basic usage of the Google Calendar API.
     Prints the start and name of the next 10 events on the user's calendar.
     """
@@ -153,9 +160,10 @@ def main(month_past, cred_path, config_path, server_mode):
         today = datetime.datetime.today()
         # first = today.replace(day=1)
         used_month = today + relativedelta(months=-month_past)
+        used_week = today + relativedelta(weeks=-week_past)
 
         # Get events from calendar
-        df_week = gcf.get_event_df_week(creds, today, calendar_id=ids["calendar_id"], timezone=tz)
+        df_week = gcf.get_event_df_week(creds, used_week, calendar_id=ids["calendar_id"], timezone=tz)
 
         logger.info('Events found week: \n %s', df_week.to_string())
 
@@ -182,7 +190,7 @@ def main(month_past, cred_path, config_path, server_mode):
         file_id = gsf.append_statistics(creds, df_month, spreadsheet_id=ids['summary_id'])
 
         # Append weekly sum to Google Sheet
-        file_id = gsf.append_statistics_weekly(creds, df_month, spreadsheet_id=ids['weekly_id'])
+        file_id = gsf.append_statistics_weekly(creds, df_week, spreadsheet_id=ids['weekly_id'])
 
     except HttpError as error:
         logger.info('An error occurred: %s', error)
@@ -195,6 +203,7 @@ if __name__ == '__main__':
     cred_path = os.path.abspath(args.cred_path)
     config_path = os.path.abspath(args.config_path)
     past_month = args.past_month
+    past_week = args.past_week
     server_mode = args.server_mode
 
     os.makedirs(log_path, exist_ok=True)
@@ -208,4 +217,4 @@ if __name__ == '__main__':
         ]
     )
 
-    main(past_month, cred_path, config_path, server_mode)
+    main(cred_path, config_path, server_mode, month_past=past_month, week_past=past_week)

@@ -101,10 +101,12 @@ def update_rows(creds, value_list, spreadsheet_id, sheet='Sheet1', start_row=1):
     return response
 
 def get_statistics_by_company(df):
-    df['start'] = df['start'].apply(lambda x: x.strftime('%Y-%m'))
-    df = df.groupby(['start', 'summary'])['duration'].sum()
-    df = pd.DataFrame(df).reset_index().pivot(index='start', columns='summary', values='duration').fillna(0)
-    df.index = df.index.astype(str)
+    df['year'] = df['start'].apply(lambda x: x.strftime('%Y'))
+    df['month'] = df['start'].apply(lambda x: x.strftime('%m'))
+    
+    df = df.groupby(['year', 'month', 'summary'])['duration'].sum()
+    df = pd.DataFrame(df).reset_index().pivot(index=['year', 'month'], columns='summary', values='duration').fillna(0)
+    # df.index = df.index.astype(str)
 
     return df
 
@@ -141,18 +143,20 @@ def sync_header(df, orig_header):
 
     return df_update
 
-def update_sheet(creds, df, spreadsheet_id):
+def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
     # TODO - Check if row exists
 
     orig_header, _, _, sheet_title = read_header(creds, spreadsheet_id)
 
     if orig_header is None:
         header = df.columns.tolist()
-        header.insert(0, 'Month')
+        header.insert(0, time_type)
+        header.insert(0, 'Year')
 
         append_rows(creds, [header], spreadsheet_id, sheet=sheet_title)
 
-        response = append_rows(creds, df.values.tolist(), spreadsheet_id, sheet=sheet_title)
+        df_update = sync_header(df, header)
+        response = append_rows(creds, df_update.values.tolist(), spreadsheet_id, sheet=sheet_title)
     else:
         df_update = sync_header(df, orig_header)
 
@@ -170,7 +174,7 @@ def append_statistics(creds, df, spreadsheet_id):
     df = get_statistics_by_company(df)
     logger.info('Summary of work hours: \n %s', df.to_string())
 
-    response = update_sheet(creds, df, spreadsheet_id)
+    response = update_sheet(creds, df, spreadsheet_id, time_type='Month')
 
     return response.get('id')
 
@@ -178,6 +182,6 @@ def append_statistics_weekly(creds, df, spreadsheet_id):
     df = get_statistics_by_company_weekly(df)
     logger.info('Summary of work hours for week: \n %s', df.to_string())
 
-    response = update_sheet(creds, df, spreadsheet_id)
+    response = update_sheet(creds, df, spreadsheet_id, time_type='Week')
 
     return response.get('id')
