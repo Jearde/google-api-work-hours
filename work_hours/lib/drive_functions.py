@@ -37,25 +37,46 @@ def check_if_file_exists(creds, file_name, folder_id):
         logger.error('An error occurred: %s', error)
         return None
 
-def upload_csv_with_conversion(file_path, creds, folder_id):
-    """Upload a csv file to Google Drive and convert it to a Google Sheet.
+def replace_sheet_content(file_id, creds, file_path):
+    """Replace the content of a Google Sheet with a csv file.
     """
 
     # API reference: 
-    # https://developers.google.com/drive/api/guides/manage-uploads
+    # https://developers.google.com/drive/api/v3/manage-uploads
 
     try:
         # create drive api client
         service = build('drive', 'v3', credentials=creds, cache_discovery=False)
 
-        base = os.path.basename(file_path)
-        file_name = os.path.splitext(base)[0]
+        # create media body
+        media = MediaFileUpload(file_path, mimetype='text/csv',
+                                resumable=True)
 
-        file_response = check_if_file_exists(creds, file_name, folder_id)
+        # pylint: disable=maybe-no-member
+        request = service.files().update(fileId=file_id, media_body=media)
+        response = request.execute()
 
-        if file_response:
-            logger.warning('Skipping file with name "%s" and ID "%s"', file_response.get("name"), file_response.get("id"))
-            return file_response.get('id')
+        logger.info('File "%s" with ID: "%s" has been updated.', response.get("name"), response.get("id"))
+
+    except HttpError as error:
+        logger.error('An error occurred: %s', error)
+        response = None
+
+    return response
+
+def create_sheet_csv(creds, file_path, folder_id):
+    """Create a Google Sheet and download it as a csv file.
+    """
+
+    base = os.path.basename(file_path)
+    file_name = os.path.splitext(base)[0]
+
+    # API reference: 
+    # https://developers.google.com/drive/api/v3/reference/files/create
+
+    try:
+        # create drive api client
+        service = build('drive', 'v3', credentials=creds, cache_discovery=False)
 
         # create file metadata
         file_metadata = {
@@ -64,16 +85,38 @@ def upload_csv_with_conversion(file_path, creds, folder_id):
             'mimeType': 'application/vnd.google-apps.spreadsheet'
         }
 
-        # create media body
         media = MediaFileUpload(file_path, mimetype='text/csv',
                                 resumable=True)
 
         # pylint: disable=maybe-no-member
-        request = service.files().create(body=file_metadata, media_body=media,
-                                      fields='id, name')
+        request = service.files().create(body=file_metadata, media_body=media, fields='id, name')
         response = request.execute()
 
-        logger.info('File "%s" with ID: "%s" has been uploaded.', response.get("name"), response.get("id"))
+        logger.info('File "%s" with ID: "%s" has been created.', response.get("name"), response.get("id"))
+
+    except HttpError as error:
+        logger.error('An error occurred: %s', error)
+        response = None
+
+    return response
+
+def upload_csv_with_conversion(file_path, creds, folder_id):
+    """Upload a csv file to Google Drive and convert it to a Google Sheet.
+    """
+
+    # API reference: 
+    # https://developers.google.com/drive/api/guides/manage-uploads
+
+    try:
+        base = os.path.basename(file_path)
+        file_name = os.path.splitext(base)[0]
+
+        file_response = check_if_file_exists(creds, file_name, folder_id)
+
+        if file_response:
+            response = replace_sheet_content(file_response.get('id'), creds, file_path)
+        else:
+            response = create_sheet_csv(creds, file_path, folder_id)
 
     except HttpError as error:
         logger.error('An error occurred: %s', error)
