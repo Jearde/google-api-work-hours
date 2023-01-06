@@ -96,4 +96,5 @@ Run the script in Docker interactive mode to create the `token.json` file
 ## What does not work
 - [ ] Using a Service Account
 - [ ] Using a Service Account in Docker container
-- [ ] Description of events in lists
+- [X] Description of events in lists
+- [ ] Weekly Work Hours

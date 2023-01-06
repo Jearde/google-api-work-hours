@@ -57,7 +57,7 @@ def create_events_table(events):
     # API reference:
     # https://developers.google.com/calendar/api/v3/reference/events#resource
 
-    df = pd.DataFrame(columns=['summary', 'start', 'end', 'duration'])
+    df = pd.DataFrame(columns=['summary', 'start', 'end', 'duration', 'description'])
 
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
@@ -68,7 +68,8 @@ def create_events_table(events):
             'summary': event['summary'],
             'start': pd.to_datetime(start),
             'end': pd.to_datetime(stop),
-            'duration': (pd.to_datetime(stop) - pd.to_datetime(start)).total_seconds() / 60 / 60
+            'duration': (pd.to_datetime(stop) - pd.to_datetime(start)).total_seconds() / 60 / 60,
+            'description': event['description'] if 'description' in event else ''
         }, index=[0], columns=df.columns)
 
         df = pd.concat([df, entry_df], ignore_index=True)
