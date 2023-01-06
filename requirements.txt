@@ -9,3 +9,4 @@ pytz
 pandas
 numpy
 python-dateutil
+isoweek

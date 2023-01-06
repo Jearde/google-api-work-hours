@@ -108,9 +108,41 @@ def get_statistics_by_company(df):
 
     return df
 
-def append_statistics(creds, df, spreadsheet_id):
-    df = get_statistics_by_company(df)
-    logger.info('Summary of work hours: \n %s', df.to_string())
+def get_statistics_by_company_weekly(df):
+    df['year'] = df['start'].apply(lambda x: pd.to_datetime(x).isocalendar()[0])
+    df['week'] = df['start'].apply(lambda x: pd.to_datetime(x).isocalendar()[1])
+
+    df = df.groupby(['year', 'week', 'summary'])['duration'].sum()
+    df = pd.DataFrame(df).reset_index().pivot(index=['year', 'week'], columns='summary', values='duration').fillna(0)
+    # df.index = df.index.astype(str)
+
+    return df
+
+def sync_header(df, orig_header):
+    # Check if there are new columns
+    new_columns = list(set(df.columns.unique().tolist()) - set(orig_header))
+    header = orig_header + new_columns
+
+    # Get month column
+    df_update = df.reset_index().rename(columns={"start": header[0]})
+
+    # All columns to lower case
+    df_update.columns = map(str.lower, df_update.columns)
+    header = map(str.lower, header)
+
+    # Sort columns
+    df_update = df_update.reindex(columns=header)
+
+    # All columns to title case
+    df_update.columns = df_update.columns.str.title()
+
+    # Fill NaN with 0 for columns without hours
+    df_update = df_update.fillna(0)
+
+    return df_update
+
+def update_sheet(creds, df, spreadsheet_id):
+    # TODO - Check if row exists
 
     orig_header, _, _, sheet_title = read_header(creds, spreadsheet_id)
 
@@ -122,25 +154,7 @@ def append_statistics(creds, df, spreadsheet_id):
 
         response = append_rows(creds, df.values.tolist(), spreadsheet_id, sheet=sheet_title)
     else:
-        # Check if there are new columns
-        new_columns = list(set(df.columns.unique().tolist()) - set(orig_header))
-        header = orig_header + new_columns
-
-        # Get month column
-        df_update = df.reset_index().rename(columns={"start": header[0]})
-
-        # All columns to lower case
-        df_update.columns = map(str.lower, df_update.columns)
-        header = map(str.lower, header)
-
-        # Sort columns
-        df_update = df_update.reindex(columns=header)
-
-        # All columns to title case
-        df_update.columns = df_update.columns.str.title()
-
-        # Fill NaN with 0 for columns without hours
-        df_update = df_update.fillna(0)
+        df_update = sync_header(df, orig_header)
 
         if len(df_update.columns) != len(orig_header):
             logger.warning('Columns are not the same. Header: %s, Columns: %s', header, df_update.columns.tolist())
@@ -148,5 +162,22 @@ def append_statistics(creds, df, spreadsheet_id):
             update_rows(creds, df_update.columns.tolist(), spreadsheet_id, sheet=sheet_title)
 
         response = append_rows(creds, df_update.values.tolist(), spreadsheet_id, sheet=sheet_title)
+
+    return response
+
+
+def append_statistics(creds, df, spreadsheet_id):
+    df = get_statistics_by_company(df)
+    logger.info('Summary of work hours: \n %s', df.to_string())
+
+    response = update_sheet(creds, df, spreadsheet_id)
+
+    return response.get('id')
+
+def append_statistics_weekly(creds, df, spreadsheet_id):
+    df = get_statistics_by_company_weekly(df)
+    logger.info('Summary of work hours for week: \n %s', df.to_string())
+
+    response = update_sheet(creds, df, spreadsheet_id)
 
     return response.get('id')

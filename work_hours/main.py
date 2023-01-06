@@ -151,13 +151,18 @@ def main(month_past, cred_path, config_path, server_mode):
         
         # Get month
         today = datetime.datetime.today()
-        first = today.replace(day=1)
-        used_month = first + relativedelta(months=-month_past)
+        # first = today.replace(day=1)
+        used_month = today + relativedelta(months=-month_past)
 
         # Get events from calendar
-        df = gcf.get_event_df_month(creds, used_month, calendar_id=ids["calendar_id"], timezone=tz)
+        df_week = gcf.get_event_df_week(creds, today, calendar_id=ids["calendar_id"], timezone=tz)
 
-        logger.info('Events found: \n %s', df.to_string())
+        logger.info('Events found week: \n %s', df_week.to_string())
+
+        # Get events from calendar
+        df_month = gcf.get_event_df_month(creds, used_month, calendar_id=ids["calendar_id"], timezone=tz)
+
+        logger.info('Events found month: \n %s', df_month.to_string())
 
         # Delete old csv files
         if os.path.exists(EXPORT_PATH) and os.path.isdir(EXPORT_PATH):
@@ -165,16 +170,19 @@ def main(month_past, cred_path, config_path, server_mode):
 
         # Export to csv
         german = locale == 'de_DE'
-        file_path = gcf.export_stats(df, file_path=f"{EXPORT_PATH}/all_{used_month.strftime('%Y-%m')}.csv", german=german)
+        file_path = gcf.export_stats(df_month, file_path=f"{EXPORT_PATH}/all_{used_month.strftime('%Y-%m')}.csv", german=german)
 
         # Export to csv by company
-        file_paths = gcf.export_stats_by_company(df, export_path=EXPORT_PATH, german=german)
+        file_paths = gcf.export_stats_by_company(df_month, export_path=EXPORT_PATH, german=german)
 
         # Upload all csv files to Google Drive
         gdf.upload_csv_folder_with_conversion(EXPORT_PATH, creds, folder_id=ids["folder_id"])
 
         # Append monthly sum to Google Sheet
-        file_id = gsf.append_statistics(creds, df, spreadsheet_id=ids['summary_id'])
+        file_id = gsf.append_statistics(creds, df_month, spreadsheet_id=ids['summary_id'])
+
+        # Append weekly sum to Google Sheet
+        file_id = gsf.append_statistics_weekly(creds, df_month, spreadsheet_id=ids['weekly_id'])
 
     except HttpError as error:
         logger.info('An error occurred: %s', error)

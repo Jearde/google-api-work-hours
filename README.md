@@ -98,3 +98,4 @@ Run the script in Docker interactive mode to create the `token.json` file
 - [ ] Using a Service Account in Docker container
 - [X] Description of events in lists
 - [ ] Weekly Work Hours
+- [ ] Calendar end date can be in next week or month
