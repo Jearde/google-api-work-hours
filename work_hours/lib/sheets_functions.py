@@ -72,67 +72,69 @@ def append_rows(creds, value_list, spreadsheet_id, sheet='Sheet1'):
     return response
 
 def update_spreadsheet(cred, spreadsheet_id, data, sheet='Sheet1', sheet_id=0):
-  try:
-    # Create a service client and build the Sheets API service
-    service = build('sheets', 'v4', credentials=cred)
+    try:
+        # Create a service client and build the Sheets API service
+        service = build('sheets', 'v4', credentials=cred)
 
-    # Get the data from the sheet
-    # pylint: disable=maybe-no-member
-    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z').execute()
-    values = result.get('values', [])
-    
-    #
-    values_num = [[float(v.replace(',','.').replace('', '0')) for v in val] for val in values[1:]]
-    data_num = [[float(v) for v in val] for val in data]
-
-    # Create a dictionary of rows to update and rows to append
-    rows_to_update = {}
-    rows_to_append = []
-    for row in data_num:
-        found = False
-        for i, r in enumerate(values_num):
-            if r[0] == row[0] and r[1] == row[1]:
-                rows_to_update[i+1] = row
-                found = True
-                break
-        if not found:
-            rows_to_append.append(row)
-
-    # Update the rows in the sheet
-    requests = []
-    for i, row in rows_to_update.items():
-        requests.append({
-            'updateCells': {
-                'start': {
-                    'sheetId': sheet_id,
-                    'rowIndex': i,
-                    'columnIndex': 0
-                },
-            'rows': [{
-                'values': [{'userEnteredValue': {'numberValue': cell}} for cell in row]
-            }],
-            'fields': 'userEnteredValue',
-            }
-        })
-    if requests:
+        # Get the data from the sheet
         # pylint: disable=maybe-no-member
-        response = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={'requests': requests}).execute()
+        result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z').execute()
+        values = result.get('values', [])
 
-    # Append the rows to the sheet
-    if rows_to_append:
-        # pylint: disable=maybe-no-member
-        response = service.spreadsheets().values().append(
-            spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z',
-            insertDataOption='INSERT_ROWS', valueInputOption='USER_ENTERED',
-            body={'values': rows_to_append}).execute()
+        # String values to float for comparison
+        values_num = [[float(v.replace(',','.')) if v != '' else 0 for v in val] for val in values[1:]]
+        data_num = [[float(v) for v in val] for val in data]
 
-    logger.info('Spreadsheet with ID "%s"  and sheet %d has been updated.', spreadsheet_id, sheet_id)
-    logger.info('Updated rows: %s', rows_to_update)
-    logger.info('Appended rows: %s', rows_to_append)
+        # Create a dictionary of rows to update and rows to append
+        rows_to_update = {}
+        rows_to_append = []
+        for row in data_num:
+            found = False
+            for i, r in enumerate(values_num):
+                if len(r) == 0: # Skip empty rows in sheet
+                    continue
+                if r[0] == row[0] and r[1] == row[1]:
+                    rows_to_update[i+1] = row
+                    found = True
+                    # break # Stop if the first match is found
+            if not found:
+                rows_to_append.append(row)
 
-  except HttpError as error:
-    logger.error('An error occurred while updating the spreadsheet: %s', error)
-    response = None
+        # Update the rows in the sheet
+        requests = []
+        for i, row in rows_to_update.items():
+            requests.append({
+                'updateCells': {
+                    'start': {
+                        'sheetId': sheet_id,
+                        'rowIndex': i,
+                        'columnIndex': 0
+                    },
+                'rows': [{
+                    'values': [{'userEnteredValue': {'numberValue': cell}} for cell in row]
+                }],
+                'fields': 'userEnteredValue',
+                }
+            })
+        if requests:
+            # pylint: disable=maybe-no-member
+            response = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={'requests': requests}).execute()
+
+        # Append the rows to the sheet
+        if rows_to_append:
+            # pylint: disable=maybe-no-member
+            response = service.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z',
+                insertDataOption='INSERT_ROWS', valueInputOption='USER_ENTERED',
+                body={'values': rows_to_append}).execute()
+
+        logger.info('Spreadsheet with ID "%s"  and sheet %d has been updated.', spreadsheet_id, sheet_id)
+        logger.info('Updated rows: %s', rows_to_update)
+        logger.info('Appended rows: %s', rows_to_append)
+
+    except HttpError as error:
+        logger.error('An error occurred while updating the spreadsheet: %s', error)
+        response = None
 
 
 def update_rows(creds, value_list, spreadsheet_id, sheet='Sheet1', start_row=1):
@@ -212,8 +214,6 @@ def sync_header(df, orig_header):
     return df_update
 
 def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
-    # TODO - Check if row exists
-
     if time_type == 'Month':
         sheet_id = 0
     elif time_type == 'Week':
