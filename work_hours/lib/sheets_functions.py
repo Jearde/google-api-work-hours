@@ -6,7 +6,7 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-def read_header(creds, spreadsheet_id, sheet_id=0):
+def read_header(creds, spreadsheet_id, sheet_idx=0):
     # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
     try:
         # create drive api client
@@ -15,8 +15,9 @@ def read_header(creds, spreadsheet_id, sheet_id=0):
         # pylint: disable=maybe-no-member
         sheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         
-        sheet_0 = sheet['sheets'][sheet_id]['properties']
+        sheet_0 = sheet['sheets'][sheet_idx]['properties']
         sheet_title = sheet_0['title']
+        sheet_id = sheet_0['sheetId']
         tz = sheet['properties']['timeZone']
         locale = sheet['properties']['locale']
 
@@ -36,7 +37,7 @@ def read_header(creds, spreadsheet_id, sheet_id=0):
         logger.error('An error occurred: %s', error)
         header, tz, locale, sheet_title = None, None, None, None
 
-    return header, tz, locale, sheet_title
+    return header, tz, locale, sheet_title, sheet_id
 
 def append_rows(creds, value_list, spreadsheet_id, sheet='Sheet1'):
     # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
@@ -69,6 +70,70 @@ def append_rows(creds, value_list, spreadsheet_id, sheet='Sheet1'):
         response = None
 
     return response
+
+def update_spreadsheet(cred, spreadsheet_id, data, sheet='Sheet1', sheet_id=0):
+  try:
+    # Create a service client and build the Sheets API service
+    service = build('sheets', 'v4', credentials=cred)
+
+    # Get the data from the sheet
+    # pylint: disable=maybe-no-member
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z').execute()
+    values = result.get('values', [])
+    
+    #
+    values_num = [[float(v.replace(',','.').replace('', '0')) for v in val] for val in values[1:]]
+    data_num = [[float(v) for v in val] for val in data]
+
+    # Create a dictionary of rows to update and rows to append
+    rows_to_update = {}
+    rows_to_append = []
+    for row in data_num:
+        found = False
+        for i, r in enumerate(values_num):
+            if r[0] == row[0] and r[1] == row[1]:
+                rows_to_update[i+1] = row
+                found = True
+                break
+        if not found:
+            rows_to_append.append(row)
+
+    # Update the rows in the sheet
+    requests = []
+    for i, row in rows_to_update.items():
+        requests.append({
+            'updateCells': {
+                'start': {
+                    'sheetId': sheet_id,
+                    'rowIndex': i,
+                    'columnIndex': 0
+                },
+            'rows': [{
+                'values': [{'userEnteredValue': {'numberValue': cell}} for cell in row]
+            }],
+            'fields': 'userEnteredValue',
+            }
+        })
+    if requests:
+        # pylint: disable=maybe-no-member
+        response = service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body={'requests': requests}).execute()
+
+    # Append the rows to the sheet
+    if rows_to_append:
+        # pylint: disable=maybe-no-member
+        response = service.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id, range=f'{sheet}!A:Z',
+            insertDataOption='INSERT_ROWS', valueInputOption='USER_ENTERED',
+            body={'values': rows_to_append}).execute()
+
+    logger.info('Spreadsheet with ID "%s"  and sheet %d has been updated.', spreadsheet_id, sheet_id)
+    logger.info('Updated rows: %s', rows_to_update)
+    logger.info('Appended rows: %s', rows_to_append)
+
+  except HttpError as error:
+    logger.error('An error occurred while updating the spreadsheet: %s', error)
+    response = None
+
 
 def update_rows(creds, value_list, spreadsheet_id, sheet='Sheet1', start_row=1):
     # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
@@ -156,7 +221,7 @@ def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
     else:
         raise ValueError('time_type must be Month or Week')
     
-    orig_header, _, _, sheet_title = read_header(creds, spreadsheet_id, sheet_id=sheet_id)
+    orig_header, _, _, sheet_title, sheet_id = read_header(creds, spreadsheet_id, sheet_idx=sheet_id)
 
     if orig_header is None:
         header = df.columns.tolist()
@@ -175,9 +240,8 @@ def update_sheet(creds, df, spreadsheet_id, time_type='Month'):
             logger.info('Updating header from Sheet ID: "%s".', spreadsheet_id)
             update_rows(creds, df_update.columns.tolist(), spreadsheet_id, sheet=sheet_title)
 
-        response = append_rows(creds, df_update.values.tolist(), spreadsheet_id, sheet=sheet_title)
-
-    return response
+        update_spreadsheet(creds, spreadsheet_id, df_update.values.tolist(), sheet=sheet_title, sheet_id=sheet_id)
+        # response = append_rows(creds, df_update.values.tolist(), spreadsheet_id, sheet=sheet_title)
 
 
 def append_statistics(creds, df, spreadsheet_id, time_type='Month'):
@@ -188,6 +252,4 @@ def append_statistics(creds, df, spreadsheet_id, time_type='Month'):
 
     logger.info('Summary of work hours for %s: \n %s', time_type.lower(), df.to_string())
 
-    response = update_sheet(creds, df, spreadsheet_id, time_type=time_type)
-
-    return response.get('id')
+    update_sheet(creds, df, spreadsheet_id, time_type=time_type)

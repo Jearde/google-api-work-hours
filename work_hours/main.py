@@ -154,7 +154,7 @@ def main(cred_path, config_path, server_mode, month_past=0, week_past=0):
             ids = json.load(json_file)
 
         # Get timezone and locale from Google Sheet
-        _, tz, locale, _ = gsf.read_header(creds, spreadsheet_id=ids['summary_id'])
+        _, tz, locale, _, sheet_id = gsf.read_header(creds, spreadsheet_id=ids['summary_id'])
         
         # Get month
         today = datetime.datetime.today()
@@ -187,10 +187,10 @@ def main(cred_path, config_path, server_mode, month_past=0, week_past=0):
         gdf.upload_csv_folder_with_conversion(EXPORT_PATH, creds, folder_id=ids["folder_id"])
 
         # Append monthly sum to Google Sheet
-        file_id = gsf.append_statistics(creds, df_month, spreadsheet_id=ids['summary_id'], time_type='Month')
+        gsf.append_statistics(creds, df_month, spreadsheet_id=ids['summary_id'], time_type='Month')
 
         # Append weekly sum to Google Sheet
-        file_id = gsf.append_statistics(creds, df_week, spreadsheet_id=ids['weekly_id'], time_type='Week')
+        gsf.append_statistics(creds, df_week, spreadsheet_id=ids['weekly_id'], time_type='Week')
 
     except HttpError as error:
         logger.info('An error occurred: %s', error)
