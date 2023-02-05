@@ -4,6 +4,7 @@ import pytz
 import calendar
 import pandas as pd
 import logging
+from isoweek import Week
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -19,6 +20,19 @@ def get_month_datetimes(date=datetime.datetime.today()):
     start = date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     end = start + datetime.timedelta(days=calendar.monthrange(start.year, start.month)[1] - 1)
     end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    return start, end
+
+def get_cw_datetimes(date=datetime.datetime.today(), week=None, year=None):
+    """Returns the start and end datetime objects for a given month in a datetime object.
+    """
+    if week is None:
+        year, week, weekday = date.isocalendar()
+    elif year is None:
+        year = date.year
+
+    start = datetime.datetime.combine(Week(year, week).monday(), datetime.datetime.min.time())
+    end = datetime.datetime.combine(Week(year, week).sunday(), datetime.datetime.max.time())
 
     return start, end
 
@@ -57,7 +71,7 @@ def create_events_table(events):
     # API reference:
     # https://developers.google.com/calendar/api/v3/reference/events#resource
 
-    df = pd.DataFrame(columns=['summary', 'start', 'end', 'duration'])
+    df = pd.DataFrame(columns=['summary', 'start', 'end', 'duration', 'description'])
 
     for event in events:
         start = event['start'].get('dateTime', event['start'].get('date'))
@@ -68,7 +82,8 @@ def create_events_table(events):
             'summary': event['summary'],
             'start': pd.to_datetime(start),
             'end': pd.to_datetime(stop),
-            'duration': (pd.to_datetime(stop) - pd.to_datetime(start)).total_seconds() / 60 / 60
+            'duration': (pd.to_datetime(stop) - pd.to_datetime(start)).total_seconds() / 60 / 60,
+            'description': event['description'] if 'description' in event else ''
         }, index=[0], columns=df.columns)
 
         df = pd.concat([df, entry_df], ignore_index=True)
@@ -124,6 +139,23 @@ def get_event_df_month(creds, month, calendar_id='primary', timezone=LOCAL_TIMEZ
         service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
         start_date, end_date = get_month_datetimes(date=month)
+        events = get_events_by_date(service, start_date, end_date, calendar_id, timezone=timezone)
+
+        df = create_events_table(events)
+    
+    except HttpError as error:
+        logger.error('Error: %s', error)
+        return None
+
+    return df
+
+def get_event_df_week(creds, date, calendar_id='primary', timezone=LOCAL_TIMEZONE):
+    """Returns a pandas DataFrame with all events from a given month.
+    """
+    try:
+        service = build('calendar', 'v3', credentials=creds, cache_discovery=False)
+
+        start_date, end_date = get_cw_datetimes(date=date, week=None, year=None)
         events = get_events_by_date(service, start_date, end_date, calendar_id, timezone=timezone)
 
         df = create_events_table(events)

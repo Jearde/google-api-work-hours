@@ -1,1 +1,1 @@
-*/1 * * * * /app/run_python.sh >> /var/log/cron.log 2>&1
+* */12 * * * /app/run_python.sh >> /var/log/cron.log 2>&1

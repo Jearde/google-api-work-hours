@@ -49,6 +49,13 @@ parser.add_argument(
     help='Number of months to go back. 0 is current month, 1 is last month (default: 1)')
 
 parser.add_argument(
+    '--week',
+    type=int,
+    dest='past_week',
+    default=0,
+    help='Number of months to go back. 0 is current month, 1 is last month (default: 1)')
+
+parser.add_argument(
     '--server',
     type=bool,
     dest='server_mode',
@@ -124,7 +131,7 @@ def create_token_server(creds, cred_path):
 
     return creds
 
-def main(month_past, cred_path, config_path, server_mode):
+def main(cred_path, config_path, server_mode, month_past=0, week_past=0):
     """Shows basic usage of the Google Calendar API.
     Prints the start and name of the next 10 events on the user's calendar.
     """
@@ -147,17 +154,23 @@ def main(month_past, cred_path, config_path, server_mode):
             ids = json.load(json_file)
 
         # Get timezone and locale from Google Sheet
-        _, tz, locale, _ = gsf.read_header(creds, spreadsheet_id=ids['summary_id'])
+        _, tz, locale, _, sheet_id = gsf.read_header(creds, spreadsheet_id=ids['summary_id'])
         
         # Get month
         today = datetime.datetime.today()
-        first = today.replace(day=1)
-        used_month = first + relativedelta(months=-month_past)
+        # first = today.replace(day=1)
+        used_month = today + relativedelta(months=-month_past)
+        used_week = today + relativedelta(weeks=-week_past)
 
         # Get events from calendar
-        df = gcf.get_event_df_month(creds, used_month, calendar_id=ids["calendar_id"], timezone=tz)
+        df_week = gcf.get_event_df_week(creds, used_week, calendar_id=ids["calendar_id"], timezone=tz)
 
-        logger.info('Events found: \n %s', df.to_string())
+        logger.info('Events found week: \n %s', df_week.to_string())
+
+        # Get events from calendar
+        df_month = gcf.get_event_df_month(creds, used_month, calendar_id=ids["calendar_id"], timezone=tz)
+
+        logger.info('Events found month: \n %s', df_month.to_string())
 
         # Delete old csv files
         if os.path.exists(EXPORT_PATH) and os.path.isdir(EXPORT_PATH):
@@ -165,16 +178,19 @@ def main(month_past, cred_path, config_path, server_mode):
 
         # Export to csv
         german = locale == 'de_DE'
-        file_path = gcf.export_stats(df, file_path=f"{EXPORT_PATH}/all_{used_month.strftime('%Y-%m')}.csv", german=german)
+        file_path = gcf.export_stats(df_month, file_path=f"{EXPORT_PATH}/all_{used_month.strftime('%Y-%m')}.csv", german=german)
 
         # Export to csv by company
-        file_paths = gcf.export_stats_by_company(df, export_path=EXPORT_PATH, german=german)
+        file_paths = gcf.export_stats_by_company(df_month, export_path=EXPORT_PATH, german=german)
 
         # Upload all csv files to Google Drive
         gdf.upload_csv_folder_with_conversion(EXPORT_PATH, creds, folder_id=ids["folder_id"])
 
         # Append monthly sum to Google Sheet
-        file_id = gsf.append_statistics(creds, df, spreadsheet_id=ids['summary_id'])
+        gsf.append_statistics(creds, df_month, spreadsheet_id=ids['summary_id'], time_type='Month')
+
+        # Append weekly sum to Google Sheet
+        gsf.append_statistics(creds, df_week, spreadsheet_id=ids['weekly_id'], time_type='Week')
 
     except HttpError as error:
         logger.info('An error occurred: %s', error)
@@ -187,6 +203,7 @@ if __name__ == '__main__':
     cred_path = os.path.abspath(args.cred_path)
     config_path = os.path.abspath(args.config_path)
     past_month = args.past_month
+    past_week = args.past_week
     server_mode = args.server_mode
 
     os.makedirs(log_path, exist_ok=True)
@@ -200,4 +217,4 @@ if __name__ == '__main__':
         ]
     )
 
-    main(past_month, cred_path, config_path, server_mode)
+    main(cred_path, config_path, server_mode, month_past=past_month, week_past=past_week)
